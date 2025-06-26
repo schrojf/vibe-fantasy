@@ -21,6 +21,8 @@ let textBoxIndex = 0;
 let textBoxChar = 0;
 let textBoxElement = null;
 let textBoxResolve = null;
+let lastTriggerTime = {}; // Debounce pre triggery
+let playerInTrigger = {}; // Sledovanie či je hráč v triggeri
 
 function showError(err) {
   errorRoot.innerHTML = `<h2 class="text-xl font-bold mb-2">Chyba v hre</h2><pre class="whitespace-pre-wrap">${err.stack || err}</pre>`;
@@ -49,16 +51,28 @@ function pointInPolygon(point, polygon) {
 function createTextBox() {
   if (!textBoxElement) {
     textBoxElement = document.createElement('div');
-    textBoxElement.className = 'fixed left-1/2 bottom-8 max-w-2xl w-[90vw] -translate-x-1/2 bg-black bg-opacity-90 border-4 border-white rounded-xl p-4 text-white text-lg font-mono shadow-xl z-50 select-none';
-    textBoxElement.style.lineHeight = '1.5';
-    textBoxElement.style.letterSpacing = '0.02em';
-    textBoxElement.style.textShadow = '0 2px 8px #000a';
+    textBoxElement.className = 'fixed left-1/2 bottom-8 max-w-3xl w-[95vw] -translate-x-1/2 z-50 select-none';
+    textBoxElement.style.fontFamily = 'monospace';
+    textBoxElement.style.fontSize = '18px';
+    textBoxElement.style.lineHeight = '1.4';
+    textBoxElement.style.letterSpacing = '0.5px';
     textBoxElement.style.pointerEvents = 'auto';
     textBoxElement.tabIndex = 0;
+    
+    // FF7 štýl pozadie a orámovanie
+    textBoxElement.style.background = 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)';
+    textBoxElement.style.border = '3px solid #444';
+    textBoxElement.style.borderRadius = '8px';
+    textBoxElement.style.padding = '20px 25px';
+    textBoxElement.style.boxShadow = '0 8px 32px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1)';
+    textBoxElement.style.color = '#e0e0e0';
+    textBoxElement.style.textShadow = '1px 1px 2px #000';
+    
     document.body.appendChild(textBoxElement);
     textBoxElement.addEventListener('click', nextTextBox);
     window.addEventListener('keydown', e => {
-      if (textBoxActive && (e.key === ' ' || e.key === 'Enter' || e.key === 'z')) {
+      if (textBoxActive && (e.key === ' ' || e.key === 'Enter' || e.key === 'z' || e.key === 'x')) {
+        e.preventDefault();
         nextTextBox();
       }
     });
@@ -81,13 +95,19 @@ function showTextBox(texts) {
 function renderTextBox() {
   const fullText = textBoxQueue[textBoxIndex] || '';
   textBoxCurrent = fullText.slice(0, textBoxChar);
-  textBoxElement.innerHTML = textBoxCurrent.replace(/\n/g, '<br>') +
-    (textBoxChar < fullText.length ? '<span class="animate-pulse">_</span>' : '<span class="text-xs text-gray-400"> (klikni alebo stlač Enter)</span>');
+  
+  // FF7 štýl text s jemným kurzorom
+  const cursor = textBoxChar < fullText.length ? 
+    '<span style="color: #ffd700; animation: blink 0.8s infinite;">█</span>' : 
+    '<span style="color: #ffd700; animation: blink 1.2s infinite;">▶</span>';
+  
+  textBoxElement.innerHTML = textBoxCurrent.replace(/\n/g, '<br>') + cursor;
+  
   if (textBoxChar < fullText.length) {
     setTimeout(() => {
       textBoxChar += 1;
       renderTextBox();
-    }, 18);
+    }, 25); // Rýchlejšie ako predtým
   }
 }
 
@@ -108,6 +128,16 @@ function nextTextBox() {
     if (textBoxResolve) textBoxResolve();
   }
 }
+
+// Pridaj CSS animáciu pre kurzor
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+`;
+document.head.appendChild(style);
 
 async function main() {
   hideError();
@@ -204,9 +234,13 @@ async function main() {
       regions = (data.regions || []).map(poly => poly.map(pt => ({x: pt.x, y: pt.y})));
       triggers = (data.triggers || []).map(trig => ({
         polygon: trig.polygon.map(pt => ({x: pt.x, y: pt.y})),
-        text: trig.text,
-        triggered: false
+        text: trig.text
       }));
+      // Inicializuj debounce pre každý trigger
+      triggers.forEach((_, index) => {
+        lastTriggerTime[index] = 0;
+        playerInTrigger[index] = false;
+      });
     }
   } catch (e) {
     regions = [];
@@ -242,11 +276,27 @@ async function main() {
       player.x = nextX;
       player.y = nextY;
     }
-    // Trigger na textové okno
-    for (const trig of triggers) {
-      if (!trig.triggered && pointInPolygon({x: player.x, y: player.y}, trig.polygon)) {
-        trig.triggered = true;
-        await showTextBox(trig.text);
+    // Trigger na textové okno s debounce
+    const currentTime = Date.now();
+    const DEBOUNCE_TIME = 2000; // 2 sekundy
+    
+    for (let i = 0; i < triggers.length; i++) {
+      const trig = triggers[i];
+      const isInTrigger = pointInPolygon({x: player.x, y: player.y}, trig.polygon);
+      
+      if (isInTrigger) {
+        // Ak hráč vstúpil do triggeru
+        if (!playerInTrigger[i]) {
+          playerInTrigger[i] = true;
+          // Ak uplynul dostatočný čas od posledného spustenia
+          if (currentTime - lastTriggerTime[i] > DEBOUNCE_TIME) {
+            lastTriggerTime[i] = currentTime;
+            await showTextBox(trig.text);
+          }
+        }
+      } else {
+        // Ak hráč opustil trigger
+        playerInTrigger[i] = false;
       }
     }
 
