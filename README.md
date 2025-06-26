@@ -2,6 +2,8 @@
 
 Osobný experimentálny projekt - jednoduchá HTML5 Canvas hra inšpirovaná klasickými JRPG hrami, postavená na čistom JavaScripte bez frameworkov.
 
+**🌍 Languages:** [English](README_EN.md) | **Slovenčina**
+
 ## 🎯 Vyskúšaj si to
 
 - **Hra:** https://schrojf.github.io/vibe-fantasy/
