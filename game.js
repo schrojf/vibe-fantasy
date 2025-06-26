@@ -449,6 +449,9 @@ async function main() {
         return { offsetX, offsetY };
       }
 
+      // Zisti, či je debug mód podľa URL
+      const debugMode = window.location.search.includes('debug');
+
       // Herný loop
       async function gameLoop() {
         // Ak je aktívne textové okno, pauzni hru
@@ -534,31 +537,50 @@ async function main() {
         ctx.strokeStyle = DEBUG_COLOR;
         ctx.stroke();
 
-        // Debug: vykresli regióny
-        ctx.save();
-        ctx.globalAlpha = 0.4;
-        ctx.fillStyle = '#ff0000';
-        for (const poly of regions) {
-          if (poly.length > 2) {
-            ctx.beginPath();
-            ctx.moveTo(poly[0].x + offsetX, poly[0].y + offsetY);
-            for (let i = 1; i < poly.length; ++i) ctx.lineTo(poly[i].x + offsetX, poly[i].y + offsetY);
-            ctx.closePath();
-            ctx.fill();
+        // Debug: vykresli regióny a triggery
+        if (debugMode) {
+          // Vykresli regióny (červené)
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          ctx.fillStyle = '#ff0000';
+          for (const poly of regions) {
+            if (poly.length > 2) {
+              ctx.beginPath();
+              ctx.moveTo(poly[0].x + offsetX, poly[0].y + offsetY);
+              for (let i = 1; i < poly.length; ++i) ctx.lineTo(poly[i].x + offsetX, poly[i].y + offsetY);
+              ctx.closePath();
+              ctx.fill();
+            }
           }
-        }
-        ctx.restore();
+          ctx.restore();
 
-        // Debug info
-        ctx.font = '16px monospace';
-        ctx.fillStyle = DEBUG_COLOR;
-        ctx.fillText(`x: ${player.x.toFixed(1)} y: ${player.y.toFixed(1)}`, px + PLAYER_RADIUS + 8, py);
-        ctx.fillText(`Mapa: ${currentMap.name}`, px + PLAYER_RADIUS + 8, py + 20);
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + 40, py);
-        ctx.strokeStyle = DEBUG_COLOR;
-        ctx.stroke();
+          // Vykresli triggery (fialové pre textové, zelené pre portály)
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          for (const trig of triggers) {
+            ctx.fillStyle = trig.action && trig.action.type === 'portal' ? '#00ff00' : '#a21caf';
+            if (trig.polygon.length > 2) {
+              ctx.beginPath();
+              ctx.moveTo(trig.polygon[0].x + offsetX, trig.polygon[0].y + offsetY);
+              for (let i = 1; i < trig.polygon.length; ++i) ctx.lineTo(trig.polygon[i].x + offsetX, trig.polygon[i].y + offsetY);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+          ctx.restore();
+
+          // Debug info
+          ctx.font = '16px monospace';
+          ctx.fillStyle = DEBUG_COLOR;
+          ctx.fillText(`x: ${player.x.toFixed(1)} y: ${player.y.toFixed(1)}`, px + PLAYER_RADIUS + 8, py);
+          ctx.fillText(`Mapa: ${currentMap.name}`, px + PLAYER_RADIUS + 8, py + 20);
+          ctx.fillText(`Regióny: ${regions.length} | Triggery: ${triggers.length}`, px + PLAYER_RADIUS + 8, py + 40);
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + 40, py);
+          ctx.strokeStyle = DEBUG_COLOR;
+          ctx.stroke();
+        }
 
         requestAnimationFrame(gameLoop);
       }
