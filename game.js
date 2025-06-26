@@ -24,6 +24,14 @@ let textBoxResolve = null;
 let lastTriggerTime = {}; // Debounce pre triggery
 let playerInTrigger = {}; // Sledovanie či je hráč v triggeri
 
+// ====== MOBILNÝ GAMEPAD ======
+let gamepadElement = null;
+let isTouchDevice = false;
+let joystickActive = false;
+let joystickCenter = { x: 0, y: 0 };
+let joystickCurrent = { x: 0, y: 0 };
+let keys = {}; // Presuniem na globálnu úroveň
+
 function showError(err) {
   errorRoot.innerHTML = `<h2 class="text-xl font-bold mb-2">Chyba v hre</h2><pre class="whitespace-pre-wrap">${err.stack || err}</pre>`;
   errorRoot.classList.remove('hidden');
@@ -139,6 +147,140 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+function createGamepad() {
+  if (gamepadElement) return;
+  
+  isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (!isTouchDevice) return;
+  
+  gamepadElement = document.createElement('div');
+  gamepadElement.className = 'fixed inset-0 pointer-events-none z-40';
+  gamepadElement.innerHTML = `
+    <!-- Joystick (ľavá strana) -->
+    <div id="joystick-container" class="absolute bottom-8 left-8 w-24 h-24 pointer-events-auto">
+      <div class="relative w-full h-full">
+        <!-- Joystick pozadie -->
+        <div class="w-full h-full bg-white/10 rounded-full border border-white/50 backdrop-blur-sm"></div>
+        <!-- Joystick handle -->
+        <div id="joystick-handle" class="absolute top-1/2 left-1/2 w-8 h-8 bg-white/20 rounded-full -translate-x-1/2 -translate-y-1/2 border border-white/25 shadow-lg backdrop-blur-sm"></div>
+      </div>
+    </div>
+    
+    <!-- Akčné tlačidlá (pravá strana) -->
+    <div class="absolute bottom-8 right-8 flex gap-4 pointer-events-auto">
+      <button id="btn-a" class="w-14 h-14 bg-green-500/40 rounded-full border border-white/50 flex items-center justify-center text-white/80 font-bold text-sm shadow-lg backdrop-blur-sm hover:bg-green-500/60 transition-all duration-200">
+        A
+      </button>
+      <button id="btn-b" class="w-14 h-14 bg-red-500/40 rounded-full border border-white/50 flex items-center justify-center text-white/80 font-bold text-sm shadow-lg backdrop-blur-sm hover:bg-red-500/60 transition-all duration-200">
+        B
+      </button>
+    </div>
+  `;
+  
+  document.body.appendChild(gamepadElement);
+  
+  // Joystick ovládanie
+  const joystickContainer = document.getElementById('joystick-container');
+  const joystickHandle = document.getElementById('joystick-handle');
+  const joystickRadius = 48; // Polomer joysticku
+  
+  function updateJoystick(x, y) {
+    const rect = joystickContainer.getBoundingClientRect();
+    joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    
+    const deltaX = x - joystickCenter.x;
+    const deltaY = y - joystickCenter.y;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    
+    if (distance > joystickRadius) {
+      const angle = Math.atan2(deltaY, deltaX);
+      joystickCurrent.x = joystickCenter.x + Math.cos(angle) * joystickRadius;
+      joystickCurrent.y = joystickCenter.y + Math.sin(angle) * joystickRadius;
+    } else {
+      joystickCurrent.x = x;
+      joystickCurrent.y = y;
+    }
+    
+    // Aktualizuj pozíciu handle
+    const handleX = joystickCurrent.x - joystickCenter.x;
+    const handleY = joystickCurrent.y - joystickCenter.y;
+    joystickHandle.style.transform = `translate(${handleX}px, ${handleY}px)`;
+    
+    // Nastav pohyb hráča
+    const deadzone = 10;
+    keys['ArrowUp'] = handleY < -deadzone;
+    keys['ArrowDown'] = handleY > deadzone;
+    keys['ArrowLeft'] = handleX < -deadzone;
+    keys['ArrowRight'] = handleX > deadzone;
+  }
+  
+  function resetJoystick() {
+    joystickCurrent = { x: joystickCenter.x, y: joystickCenter.y };
+    joystickHandle.style.transform = 'translate(-50%, -50%)';
+    keys['ArrowUp'] = keys['ArrowDown'] = keys['ArrowLeft'] = keys['ArrowRight'] = false;
+  }
+  
+  // Touch events pre joystick
+  joystickContainer.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    joystickActive = true;
+    updateJoystick(e.touches[0].clientX, e.touches[0].clientY);
+  });
+  
+  joystickContainer.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (joystickActive) {
+      updateJoystick(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  });
+  
+  joystickContainer.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    joystickActive = false;
+    resetJoystick();
+  });
+  
+  // Mouse events pre desktop testovanie
+  joystickContainer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    joystickActive = true;
+    updateJoystick(e.clientX, e.clientY);
+  });
+  
+  joystickContainer.addEventListener('mousemove', (e) => {
+    e.preventDefault();
+    if (joystickActive) {
+      updateJoystick(e.clientX, e.clientY);
+    }
+  });
+  
+  joystickContainer.addEventListener('mouseup', (e) => {
+    e.preventDefault();
+    joystickActive = false;
+    resetJoystick();
+  });
+  
+  // Event listeners pre akčné tlačidlá
+  document.getElementById('btn-a').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (textBoxActive) nextTextBox();
+  });
+  document.getElementById('btn-b').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (textBoxActive) nextTextBox();
+  });
+  
+  // Mouse events pre desktop testovanie
+  document.getElementById('btn-a').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (textBoxActive) nextTextBox();
+  });
+  document.getElementById('btn-b').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (textBoxActive) nextTextBox();
+  });
+}
+
 async function main() {
   hideError();
   // Canvas setup
@@ -164,33 +306,12 @@ async function main() {
     speed: 5,
   };
 
-  // Ovládanie
-  const keys = {};
+  // Ovládanie (keys už je definované globálne)
   window.addEventListener('keydown', e => { keys[e.key] = true; });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-  // Touch ovládanie (veľmi jednoduché)
-  let touchStart = null;
-  canvas.addEventListener('touchstart', e => {
-    if (e.touches.length === 1) touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  });
-  canvas.addEventListener('touchend', () => { touchStart = null; });
-  canvas.addEventListener('touchmove', e => {
-    if (!touchStart || e.touches.length !== 1) return;
-    const dx = e.touches[0].clientX - touchStart.x;
-    const dy = e.touches[0].clientY - touchStart.y;
-    if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
-      if (Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 0) keys['ArrowRight'] = true;
-        else keys['ArrowLeft'] = true;
-      } else {
-        if (dy > 0) keys['ArrowDown'] = true;
-        else keys['ArrowUp'] = true;
-      }
-      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      setTimeout(() => { keys['ArrowRight'] = keys['ArrowLeft'] = keys['ArrowUp'] = keys['ArrowDown'] = false; }, 100);
-    }
-  });
+  // Vytvor gamepad pre mobilné zariadenia
+  createGamepad();
 
   // Resizovanie canvasu
   function resizeCanvas() {
