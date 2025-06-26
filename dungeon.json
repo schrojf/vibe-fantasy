@@ -1,0 +1,32 @@
+{
+    "regions": [],
+    "triggers": [
+      {
+        "polygon": [
+          {
+            "x": 100,
+            "y": 100
+          },
+          {
+            "x": 200,
+            "y": 100
+          },
+          {
+            "x": 200,
+            "y": 200
+          },
+          {
+            "x": 100,
+            "y": 200
+          }
+        ],
+        "text": "Portál späť do dediny...\nCítim teplo slnka.",
+        "action": {
+          "type": "portal",
+          "mapId": "village",
+          "playerX": 800,
+          "playerY": 600
+        }
+      }
+    ]
+}

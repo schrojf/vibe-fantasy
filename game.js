@@ -36,6 +36,13 @@ let joystickCenter = { x: 0, y: 0 };
 let joystickCurrent = { x: 0, y: 0 };
 let keys = {}; // Presuniem na globálnu úroveň
 
+// ====== HRÁČ ======
+let player = {
+  x: 100,
+  y: 100,
+  speed: 5,
+};
+
 function showError(err) {
   errorRoot.innerHTML = `<h2 class="text-xl font-bold mb-2">Chyba v hre</h2><pre class="whitespace-pre-wrap">${err.stack || err}</pre>`;
   errorRoot.classList.remove('hidden');
@@ -337,16 +344,40 @@ async function processTriggerAction(trigger) {
   if (!trigger.action) return;
   
   const action = trigger.action;
-  if (action.type === 'changeMap') {
-    // Prechod na inú mapu
-    await loadMap(action.mapId);
+  
+  // Portal prechod na inú mapu
+  if (action.type === 'portal') {
+    console.log(`Portal: presun na mapu '${action.mapId}' na pozíciu (${action.playerX}, ${action.playerY})`);
+    
+    // Načítaj novú mapu
+    let { bgImg } = await loadMap(action.mapId);
+    
     // Reset pozície hráča na novú mapu
     player.x = action.playerX || 100;
     player.y = action.playerY || 100;
-    // Načítaj nové pozadie a regióny
-    const { bgImg } = await loadMap(action.mapId);
+    
+    // Ochrana proti pozícii mimo mapu
+    player.x = Math.max(PLAYER_RADIUS, Math.min(bgImg.width - PLAYER_RADIUS, player.x));
+    player.y = Math.max(PLAYER_RADIUS, Math.min(bgImg.height - PLAYER_RADIUS, player.y));
+    
     return bgImg;
   }
+  
+  // Zachovám starú podporu pre changeMap (pre kompatibilitu)
+  if (action.type === 'changeMap') {
+    console.log(`ChangeMap: presun na mapu '${action.mapId}' na pozíciu (${action.playerX}, ${action.playerY})`);
+    
+    const { bgImg } = await loadMap(action.mapId);
+    player.x = action.playerX || 100;
+    player.y = action.playerY || 100;
+    
+    // Ochrana proti pozícii mimo mapu
+    player.x = Math.max(PLAYER_RADIUS, Math.min(bgImg.width - PLAYER_RADIUS, player.x));
+    player.y = Math.max(PLAYER_RADIUS, Math.min(bgImg.height - PLAYER_RADIUS, player.y));
+    
+    return bgImg;
+  }
+  
   return null;
 }
 
@@ -362,7 +393,7 @@ async function main() {
       const defaultMapId = mapsData.defaultMap || Object.keys(maps)[0];
       
       // Načítanie predvolenej mapy
-      const { bgImg } = await loadMap(defaultMapId);
+      let { bgImg } = await loadMap(defaultMapId);
       
       // Canvas setup
       const canvas = document.createElement('canvas');
@@ -372,12 +403,10 @@ async function main() {
       gameRoot.appendChild(canvas);
       const ctx = canvas.getContext('2d');
 
-      // Herný stav
-      let player = {
-        x: bgImg.width / 2,
-        y: bgImg.height / 2,
-        speed: 5,
-      };
+      // Inicializácia hráča na stred mapy
+      player.x = bgImg.width / 2;
+      player.y = bgImg.height / 2;
+      player.speed = 5;
 
       // Ovládanie (keys už je definované globálne)
       window.addEventListener('keydown', e => { keys[e.key] = true; });

@@ -72,6 +72,33 @@
           }
         ],
         "text": "Vítaj návštevník\nPoriadne sa rozhladaj a zisti, čo sa tu deje.\nVstúpil si do fantázie."
+      },
+      {
+        "polygon": [
+          {
+            "x": 1200,
+            "y": 400
+          },
+          {
+            "x": 1300,
+            "y": 400
+          },
+          {
+            "x": 1300,
+            "y": 500
+          },
+          {
+            "x": 1200,
+            "y": 500
+          }
+        ],
+        "text": "Cítim silnú energiu...\nToto je portál do dungeonu!",
+        "action": {
+          "type": "portal",
+          "mapId": "dungeon",
+          "playerX": 200,
+          "playerY": 300
+        }
       }
     ]
   }

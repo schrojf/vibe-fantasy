@@ -12,7 +12,7 @@ let offsetX = 0, offsetY = 0;
 
 let regions = [];
 let currentRegion = [];
-let mode = 'region'; // 'region', 'trigger', alebo 'select'
+let mode = 'region'; // 'region', 'trigger', 'portal', alebo 'select'
 let triggers = [];
 let currentTriggerText = '';
 let selectedObject = null; // { type: 'region'|'trigger', index: number }
@@ -51,12 +51,12 @@ function draw() {
     }
   }
   ctx.restore();
-  // Vykresli triggery (fialové)
+  // Vykresli triggery (fialové pre textové, zelené pre portály)
   ctx.save();
   ctx.globalAlpha = 0.4;
-  ctx.fillStyle = '#a21caf';
   for (let i = 0; i < triggers.length; i++) {
     const trig = triggers[i];
+    ctx.fillStyle = trig.action && trig.action.type === 'portal' ? '#00ff00' : '#a21caf';
     if (trig.polygon.length > 2) {
       ctx.beginPath();
       ctx.moveTo(trig.polygon[0].x, trig.polygon[0].y);
@@ -69,7 +69,7 @@ function draw() {
   // Body aktuálneho regiónu
   if (currentRegion.length > 0) {
     ctx.save();
-    ctx.strokeStyle = mode === 'region' ? '#00ffcc' : '#a21caf';
+    ctx.strokeStyle = mode === 'region' ? '#00ffcc' : mode === 'trigger' ? '#a21caf' : '#00ff00';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(currentRegion[0].x, currentRegion[0].y);
@@ -80,7 +80,7 @@ function draw() {
     for (const pt of currentRegion) {
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, 5, 0, 2 * Math.PI);
-      ctx.fillStyle = mode === 'region' ? '#00ffcc' : '#a21caf';
+      ctx.fillStyle = mode === 'region' ? '#00ffcc' : mode === 'trigger' ? '#a21caf' : '#00ff00';
       ctx.fill();
     }
   }
@@ -100,7 +100,7 @@ function draw() {
     for (const pt of trig.polygon) {
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, 4, 0, 2 * Math.PI);
-      ctx.fillStyle = '#a21caf';
+      ctx.fillStyle = trig.action && trig.action.type === 'portal' ? '#00ff00' : '#a21caf';
       ctx.fill();
     }
   }
@@ -146,12 +146,14 @@ function updateStatusBar() {
   const modeNames = {
     'region': 'Nepriechodné regióny',
     'trigger': 'Textové triggery', 
-    'select': 'Výber a mazanie'
+    'select': 'Výber a mazanie',
+    'portal': 'Portály'
   };
   const modeColors = {
     'region': 'bg-blue-600',
     'trigger': 'bg-purple-600',
-    'select': 'bg-orange-600'
+    'select': 'bg-orange-600',
+    'portal': 'bg-green-600'
   };
   document.getElementById('current-mode').textContent = modeNames[mode];
   document.getElementById('current-mode').className = `ml-2 px-2 py-1 rounded text-sm font-medium ${modeColors[mode]}`;
@@ -166,11 +168,13 @@ function updateStatusBar() {
   if (selectedObject) {
     const typeNames = {
       'region': 'Nepriechodný región',
-      'trigger': 'Textový trigger'
+      'trigger': 'Textový trigger',
+      'portal': 'Portál'
     };
     const typeColors = {
       'region': 'bg-red-600',
-      'trigger': 'bg-purple-600'
+      'trigger': 'bg-purple-600',
+      'portal': 'bg-green-600'
     };
     selectedType.textContent = typeNames[selectedObject.type];
     selectedType.className = `ml-2 px-2 py-1 rounded text-sm font-medium ${typeColors[selectedObject.type]}`;
@@ -185,6 +189,7 @@ function setMode(newMode) {
   // Aktualizuj vizuálny stav tlačidiel
   document.getElementById('btn-mode-region').classList.toggle('ring-2', mode === 'region');
   document.getElementById('btn-mode-trigger').classList.toggle('ring-2', mode === 'trigger');
+  document.getElementById('btn-mode-portal').classList.toggle('ring-2', mode === 'portal');
   document.getElementById('btn-delete-selected').classList.toggle('ring-2', mode === 'select');
   selectedObject = null;
   updateStatusBar();
@@ -193,6 +198,7 @@ function setMode(newMode) {
 
 document.getElementById('btn-mode-region').onclick = () => setMode('region');
 document.getElementById('btn-mode-trigger').onclick = () => setMode('trigger');
+document.getElementById('btn-mode-portal').onclick = () => setMode('portal');
 document.getElementById('btn-delete-selected').onclick = () => {
   if (selectedObject) {
     // Ak je už niečo vybrané, vymaž to
@@ -277,6 +283,28 @@ canvas.addEventListener('dblclick', async e => {
         triggers.push({ polygon: [...currentRegion], text });
         currentTriggerText = text;
       }
+    } else if (mode === 'portal') {
+      let text = prompt('Zadaj text pre portál (použi \\n pre nový riadok):', currentTriggerText || '');
+      if (text) {
+        let targetMapId = prompt('Zadaj ID cieľovej mapy (napr. dungeon):');
+        if (targetMapId) {
+          let playerX = parseInt(prompt('X pozícia hráča na cieľovej mape:', '100'));
+          let playerY = parseInt(prompt('Y pozícia hráča na cieľovej mape:', '100'));
+          if (!isNaN(playerX) && !isNaN(playerY)) {
+            triggers.push({ 
+              polygon: [...currentRegion], 
+              text,
+              action: {
+                type: 'portal',
+                mapId: targetMapId,
+                playerX: playerX,
+                playerY: playerY
+              }
+            });
+            currentTriggerText = text;
+          }
+        }
+      }
     }
     currentRegion = [];
     updateStatusBar();
@@ -293,6 +321,28 @@ document.getElementById('btn-new-region').onclick = () => {
       if (text) {
         triggers.push({ polygon: [...currentRegion], text });
         currentTriggerText = text;
+      }
+    } else if (mode === 'portal') {
+      let text = prompt('Zadaj text pre portál (použi \\n pre nový riadok):', currentTriggerText || '');
+      if (text) {
+        let targetMapId = prompt('Zadaj ID cieľovej mapy (napr. dungeon):');
+        if (targetMapId) {
+          let playerX = parseInt(prompt('X pozícia hráča na cieľovej mape:', '100'));
+          let playerY = parseInt(prompt('Y pozícia hráča na cieľovej mape:', '100'));
+          if (!isNaN(playerX) && !isNaN(playerY)) {
+            triggers.push({ 
+              polygon: [...currentRegion], 
+              text,
+              action: {
+                type: 'portal',
+                mapId: targetMapId,
+                playerX: playerX,
+                playerY: playerY
+              }
+            });
+            currentTriggerText = text;
+          }
+        }
       }
     }
   }
