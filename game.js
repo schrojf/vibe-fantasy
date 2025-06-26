@@ -1,4 +1,4 @@
-// Herný engine pre FF-like hru
+// Herný engine pre VF-like hru
 
 const MAPS_CONFIG = 'maps.json';
 const PLAYER_RADIUS = 32;
@@ -78,7 +78,7 @@ function createTextBox() {
     textBoxElement.style.pointerEvents = 'auto';
     textBoxElement.tabIndex = 0;
     
-    // FF7 štýl pozadie a orámovanie
+    // VF štýl pozadie a orámovanie
     textBoxElement.style.background = 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)';
     textBoxElement.style.border = '3px solid #444';
     textBoxElement.style.borderRadius = '8px';
@@ -115,7 +115,7 @@ function renderTextBox() {
   const fullText = textBoxQueue[textBoxIndex] || '';
   textBoxCurrent = fullText.slice(0, textBoxChar);
   
-  // FF7 štýl text s jemným kurzorom
+  // VF štýl text s jemným kurzorom
   const cursor = textBoxChar < fullText.length ? 
     '<span style="color: #ffd700; animation: blink 0.8s infinite;">█</span>' : 
     '<span style="color: #ffd700; animation: blink 1.2s infinite;">▶</span>';

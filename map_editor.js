@@ -1,4 +1,4 @@
-// Editor nepriechodných regiónov pre FF-like hru
+// Editor nepriechodných regiónov pre VF-like hru
 
 const BG_SRC = 'background.png';
 const MAPS_CONFIG = 'maps.json';
