@@ -349,6 +349,11 @@ async function processTriggerAction(trigger) {
   if (action.type === 'portal') {
     console.log(`Portal: presun na mapu '${action.mapId}' na pozíciu (${action.playerX}, ${action.playerY})`);
     
+    // Ak má portál text, zobraz ho najprv
+    if (trigger.text && trigger.text.trim()) {
+      await showTextBox(trigger.text);
+    }
+    
     // Načítaj novú mapu
     let { bgImg } = await loadMap(action.mapId);
     
@@ -366,6 +371,11 @@ async function processTriggerAction(trigger) {
   // Zachovám starú podporu pre changeMap (pre kompatibilitu)
   if (action.type === 'changeMap') {
     console.log(`ChangeMap: presun na mapu '${action.mapId}' na pozíciu (${action.playerX}, ${action.playerY})`);
+    
+    // Ak má portál text, zobraz ho najprv
+    if (trigger.text && trigger.text.trim()) {
+      await showTextBox(trigger.text);
+    }
     
     const { bgImg } = await loadMap(action.mapId);
     player.x = action.playerX || 100;
