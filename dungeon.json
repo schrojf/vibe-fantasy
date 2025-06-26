@@ -379,7 +379,7 @@
           "y": 443
         }
       ],
-      "text": "Portál naspať do dediny",
+      "text": "Závoj reality sa trhá a portál do dediny žiari prastarým svetlom.",
       "action": {
         "type": "portal",
         "mapId": "village",
@@ -410,7 +410,7 @@
           "y": 470
         }
       ],
-      "text": "Dostal si sa až do samotných útrob tejto hory."
+      "text": "Odvážlivec, vkročil si do temných útrob hory, kde driemu dávne sily."
     }
   ]
 }

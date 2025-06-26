@@ -401,7 +401,7 @@
           "y": 275
         }
       ],
-      "text": "Cítim silnú energiu...\nToto je portál do dungeonu!",
+      "text": "Vo vzduchu víri pradávna mágia...\nPred tebou sa otvára portál do Zabudnutého Dungeonu.",
       "action": {
         "type": "portal",
         "mapId": "dungeon",
@@ -440,7 +440,7 @@
           "y": 585
         }
       ],
-      "text": "Vítaj návštevník\nPoriadne sa rozhladaj a zisti, čo sa tu deje.\nVstúpil si do fantázie."
+      "text": "Vitaj, pútnik z ďalekých krajov.\nTajomstvá tejto dediny čakajú na objavenie.\nNech ťa sprevádza svetlo fantázie."
     },
     {
       "polygon": [
