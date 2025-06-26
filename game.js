@@ -8,6 +8,37 @@ const DEBUG_COLOR = '#ff00cc';
 const gameRoot = document.getElementById('game-root');
 const errorRoot = document.getElementById('error-root');
 
+// ====== KONFIGURÁCIA REGIÓNOV ======
+const REGIONS_SRC = 'regions.json'; // Export z editora
+let regions = [];
+
+// ====== TRIGGERY PRE TEXTOVÉ OKNÁ ======
+const TEXT_TRIGGERS = [
+  {
+    id: 'budova1',
+    region: [ // jednoduchý obdĺžnik okolo budovy (príklad)
+      {x: 400, y: 300},
+      {x: 600, y: 300},
+      {x: 600, y: 500},
+      {x: 400, y: 500}
+    ],
+    text: [
+      'Vitaj v našej dedine!\nTu začína tvoja cesta.',
+      'Ak chceš pokračovať, vydaj sa na sever.'
+    ],
+    triggered: false
+  }
+];
+
+// ====== TEXTOVÉ OKNO ======
+let textBoxActive = false;
+let textBoxQueue = [];
+let textBoxCurrent = '';
+let textBoxIndex = 0;
+let textBoxChar = 0;
+let textBoxElement = null;
+let textBoxResolve = null;
+
 function showError(err) {
   errorRoot.innerHTML = `<h2 class="text-xl font-bold mb-2">Chyba v hre</h2><pre class="whitespace-pre-wrap">${err.stack || err}</pre>`;
   errorRoot.classList.remove('hidden');
@@ -16,6 +47,83 @@ function showError(err) {
 
 function hideError() {
   errorRoot.classList.add('hidden');
+}
+
+// Pomocná funkcia: bod v polygóne (ray-casting algorithm)
+function pointInPolygon(point, polygon) {
+  let {x, y} = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    let xi = polygon[i].x, yi = polygon[i].y;
+    let xj = polygon[j].x, yj = polygon[j].y;
+    let intersect = ((yi > y) !== (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / (yj - yi + 0.00001) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function createTextBox() {
+  if (!textBoxElement) {
+    textBoxElement = document.createElement('div');
+    textBoxElement.className = 'fixed left-1/2 bottom-8 max-w-2xl w-[90vw] -translate-x-1/2 bg-black bg-opacity-90 border-4 border-white rounded-xl p-4 text-white text-lg font-mono shadow-xl z-50 select-none';
+    textBoxElement.style.lineHeight = '1.5';
+    textBoxElement.style.letterSpacing = '0.02em';
+    textBoxElement.style.textShadow = '0 2px 8px #000a';
+    textBoxElement.style.pointerEvents = 'auto';
+    textBoxElement.tabIndex = 0;
+    document.body.appendChild(textBoxElement);
+    textBoxElement.addEventListener('click', nextTextBox);
+    window.addEventListener('keydown', e => {
+      if (textBoxActive && (e.key === ' ' || e.key === 'Enter' || e.key === 'z')) {
+        nextTextBox();
+      }
+    });
+  }
+}
+
+function showTextBox(texts) {
+  createTextBox();
+  textBoxActive = true;
+  textBoxQueue = Array.isArray(texts) ? texts : [texts];
+  textBoxIndex = 0;
+  textBoxChar = 0;
+  textBoxCurrent = '';
+  textBoxElement.style.display = '';
+  textBoxElement.focus();
+  renderTextBox();
+  return new Promise(resolve => { textBoxResolve = resolve; });
+}
+
+function renderTextBox() {
+  const fullText = textBoxQueue[textBoxIndex] || '';
+  textBoxCurrent = fullText.slice(0, textBoxChar);
+  textBoxElement.innerHTML = textBoxCurrent.replace(/\n/g, '<br>') +
+    (textBoxChar < fullText.length ? '<span class="animate-pulse">_</span>' : '<span class="text-xs text-gray-400"> (klikni alebo stlač Enter)</span>');
+  if (textBoxChar < fullText.length) {
+    setTimeout(() => {
+      textBoxChar += 1;
+      renderTextBox();
+    }, 18);
+  }
+}
+
+function nextTextBox() {
+  const fullText = textBoxQueue[textBoxIndex] || '';
+  if (textBoxChar < fullText.length) {
+    textBoxChar = fullText.length;
+    renderTextBox();
+    return;
+  }
+  textBoxIndex++;
+  textBoxChar = 0;
+  if (textBoxIndex < textBoxQueue.length) {
+    renderTextBox();
+  } else {
+    textBoxElement.style.display = 'none';
+    textBoxActive = false;
+    if (textBoxResolve) textBoxResolve();
+  }
 }
 
 async function main() {
@@ -105,16 +213,55 @@ async function main() {
     return { offsetX, offsetY };
   }
 
+  // Načítanie regiónov
+  try {
+    const resp = await fetch(REGIONS_SRC);
+    if (resp.ok) {
+      const data = await resp.json();
+      // Konvertuj na {x, y} objekty ak treba
+      regions = data.map(poly => poly.map(pt => ({x: pt.x, y: pt.y})));
+    }
+  } catch (e) {
+    // Ak regions.json neexistuje, regióny budú prázdne
+    regions = [];
+  }
+
   // Herný loop
-  function gameLoop() {
-    // Pohyb hráča
-    if (keys['ArrowUp']) player.y -= player.speed;
-    if (keys['ArrowDown']) player.y += player.speed;
-    if (keys['ArrowLeft']) player.x -= player.speed;
-    if (keys['ArrowRight']) player.x += player.speed;
+  async function gameLoop() {
+    // Ak je aktívne textové okno, pauzni hru
+    if (textBoxActive) {
+      requestAnimationFrame(gameLoop);
+      return;
+    }
+    // Pohyb hráča s kolíziou
+    let nextX = player.x;
+    let nextY = player.y;
+    if (keys['ArrowUp']) nextY -= player.speed;
+    if (keys['ArrowDown']) nextY += player.speed;
+    if (keys['ArrowLeft']) nextX -= player.speed;
+    if (keys['ArrowRight']) nextX += player.speed;
     // Ochrana proti pohybu mimo mapu
-    player.x = Math.max(PLAYER_RADIUS, Math.min(bgImg.width - PLAYER_RADIUS, player.x));
-    player.y = Math.max(PLAYER_RADIUS, Math.min(bgImg.height - PLAYER_RADIUS, player.y));
+    nextX = Math.max(PLAYER_RADIUS, Math.min(bgImg.width - PLAYER_RADIUS, nextX));
+    nextY = Math.max(PLAYER_RADIUS, Math.min(bgImg.height - PLAYER_RADIUS, nextY));
+    // Kontrola kolízie s regiónmi (stred hráča)
+    let collision = false;
+    for (const poly of regions) {
+      if (pointInPolygon({x: nextX, y: nextY}, poly)) {
+        collision = true;
+        break;
+      }
+    }
+    if (!collision) {
+      player.x = nextX;
+      player.y = nextY;
+    }
+    // Trigger na textové okno
+    for (const trig of TEXT_TRIGGERS) {
+      if (!trig.triggered && pointInPolygon({x: player.x, y: player.y}, trig.region)) {
+        trig.triggered = true;
+        await showTextBox(trig.text);
+      }
+    }
 
     // Výpočet offsetu
     const { offsetX, offsetY } = getBgOffset();
@@ -144,6 +291,21 @@ async function main() {
     ctx.lineTo(px + 40, py);
     ctx.strokeStyle = DEBUG_COLOR;
     ctx.stroke();
+
+    // Debug: vykresli regióny
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = '#ff0000';
+    for (const poly of regions) {
+      if (poly.length > 2) {
+        ctx.beginPath();
+        ctx.moveTo(poly[0].x + offsetX, poly[0].y + offsetY);
+        for (let i = 1; i < poly.length; ++i) ctx.lineTo(poly[i].x + offsetX, poly[i].y + offsetY);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
 
     requestAnimationFrame(gameLoop);
   }

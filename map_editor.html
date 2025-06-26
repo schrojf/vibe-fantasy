@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="sk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Editor Máp - FF-like hra</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body class="bg-gray-900 min-h-screen min-w-screen flex flex-col items-center justify-start p-4">
+    <h1 class="text-2xl font-bold text-white mb-4">Editor nepriechodných regiónov</h1>
+    <div class="flex flex-row gap-4 mb-4">
+      <button id="btn-new-region" class="bg-blue-600 text-white px-4 py-2 rounded">Nový región</button>
+      <button id="btn-export" class="bg-green-600 text-white px-4 py-2 rounded">Exportovať JSON</button>
+      <button id="btn-undo" class="bg-yellow-600 text-white px-4 py-2 rounded">Undo bod</button>
+      <button id="btn-clear" class="bg-red-600 text-white px-4 py-2 rounded">Vymazať všetko</button>
+    </div>
+    <div class="relative border-2 border-gray-700" style="max-width:90vw; max-height:70vh;">
+      <canvas id="map-canvas" class="block bg-black" tabindex="0"></canvas>
+    </div>
+    <textarea id="export-output" class="w-full mt-4 p-2 bg-gray-800 text-white rounded h-40" readonly></textarea>
+    <script src="map_editor.js"></script>
+  </body>
+</html> 
