@@ -1,0 +1,21 @@
+{
+  "defaultMap": "village",
+  "maps": {
+    "village": {
+      "name": "Dedina",
+      "background": "village.png",
+      "regions": "village.json",
+      "description": "Hlavná dedina hry",
+      "playerStartX": 555,
+      "playerStartY": 715
+    },
+    "dungeon": {
+      "name": "Dungeon",
+      "background": "dungeon.png",
+      "regions": "dungeon.json",
+      "description": "Dungeon v horách",
+      "playerStartX": 811,
+      "playerStartY": 571
+    }
+  }
+}
