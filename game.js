@@ -403,9 +403,10 @@ async function main() {
       gameRoot.appendChild(canvas);
       const ctx = canvas.getContext('2d');
 
-      // Inicializácia hráča na stred mapy
-      player.x = bgImg.width / 2;
-      player.y = bgImg.height / 2;
+      // Inicializácia hráča na počiatočnú pozíciu mapy
+      const currentMapConfig = maps[defaultMapId];
+      player.x = currentMapConfig.playerStartX || bgImg.width / 2;
+      player.y = currentMapConfig.playerStartY || bgImg.height / 2;
       player.speed = 5;
 
       // Ovládanie (keys už je definované globálne)
