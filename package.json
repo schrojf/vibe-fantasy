@@ -1,11 +1,11 @@
 {
-  "name": "html5-canvas-game",
+  "name": "ff-canvas-hra",
   "version": "1.0.0",
-  "main": "index.html",
+  "description": "HTML5 Canvas engine pre FF-like hru s podporou regiónov a editorom",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "live-server --port=8080 --no-browser"
   },
-  "author": "Viliam Schrojf",
-  "license": "ISC",
-  "description": ""
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  }
 }
