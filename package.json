@@ -4,7 +4,7 @@
   "description": "HTML5 Canvas engine pre FF-like hru s podporou regiónov a editorom",
   "scripts": {
     "predeploy-gh-pages": "rm -rf dist && mkdir dist && cp *.html *.js *.json *.png dist/ 2>/dev/null || true",
-    "deploy-gh-pages": "gh-pages -d dist -t",
+    "deploy-gh-pages": "gh-pages -d dist -t --nojekyll",
     "start": "live-server --port=8080 --no-browser"
   },
   "devDependencies": {
