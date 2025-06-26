@@ -36,6 +36,12 @@ let joystickCenter = { x: 0, y: 0 };
 let joystickCurrent = { x: 0, y: 0 };
 let keys = {}; // Presuniem na globálnu úroveň
 
+// ====== LOADING SCREEN ======
+let loadingElement = null;
+let progressBar = null;
+let loadingText = null;
+let progressText = null;
+
 // ====== HRÁČ ======
 let player = {
   x: 100,
@@ -304,6 +310,7 @@ async function loadMap(mapId) {
     currentMap = mapConfig;
     
     // Načítanie pozadia
+    updateLoadingProgress(50, `Načítavam pozadie: ${mapConfig.background}...`);
     const bgImg = new window.Image();
     bgImg.src = mapConfig.background;
     await new Promise((resolve, reject) => {
@@ -311,6 +318,7 @@ async function loadMap(mapId) {
       bgImg.onerror = () => reject(new Error('Nepodarilo sa načítať obrázok pozadia: ' + mapConfig.background));
     });
     
+    updateLoadingProgress(60, 'Načítavam regióny a triggery...');
     // Načítanie regiónov a triggerov
     try {
       const resp = await fetch(mapConfig.regions);
@@ -354,9 +362,14 @@ async function processTriggerAction(trigger) {
       await showTextBox(trigger.text);
     }
     
+    // Zobraz loading screen pre zmenu mapy
+    createLoadingScreen();
+    updateLoadingProgress(10, 'Načítavam novú mapu...');
+    
     // Načítaj novú mapu
     let { bgImg } = await loadMap(action.mapId);
     
+    updateLoadingProgress(90, 'Nastavujem pozíciu hráča...');
     // Reset pozície hráča na novú mapu
     player.x = action.playerX || 100;
     player.y = action.playerY || 100;
@@ -364,6 +377,13 @@ async function processTriggerAction(trigger) {
     // Ochrana proti pozícii mimo mapu
     player.x = Math.max(PLAYER_RADIUS, Math.min(bgImg.width - PLAYER_RADIUS, player.x));
     player.y = Math.max(PLAYER_RADIUS, Math.min(bgImg.height - PLAYER_RADIUS, player.y));
+    
+    updateLoadingProgress(100, 'Mapa načítaná!');
+    
+    // Skryj loading screen
+    setTimeout(() => {
+      hideLoadingScreen();
+    }, 300);
     
     return bgImg;
   }
@@ -377,6 +397,10 @@ async function processTriggerAction(trigger) {
       await showTextBox(trigger.text);
     }
     
+    // Zobraz loading screen pre zmenu mapy
+    createLoadingScreen();
+    updateLoadingProgress(10, 'Načítavam novú mapu...');
+    
     const { bgImg } = await loadMap(action.mapId);
     player.x = action.playerX || 100;
     player.y = action.playerY || 100;
@@ -385,26 +409,85 @@ async function processTriggerAction(trigger) {
     player.x = Math.max(PLAYER_RADIUS, Math.min(bgImg.width - PLAYER_RADIUS, player.x));
     player.y = Math.max(PLAYER_RADIUS, Math.min(bgImg.height - PLAYER_RADIUS, player.y));
     
+    updateLoadingProgress(100, 'Mapa načítaná!');
+    
+    // Skryj loading screen
+    setTimeout(() => {
+      hideLoadingScreen();
+    }, 300);
+    
     return bgImg;
   }
   
   return null;
 }
 
+function createLoadingScreen() {
+  if (loadingElement) return;
+  
+  loadingElement = document.createElement('div');
+  loadingElement.className = 'fixed inset-0 bg-gray-900 flex flex-col items-center justify-center z-50';
+  loadingElement.innerHTML = `
+    <div class="text-center">
+      <h1 class="text-4xl font-bold text-white mb-8">🎮 Vibe Fantasy</h1>
+      <div class="text-xl text-gray-300 mb-6" id="loading-text">Načítavam hru...</div>
+      <div class="w-80 bg-gray-700 rounded-full h-3 mb-4">
+        <div class="bg-blue-600 h-3 rounded-full transition-all duration-300" id="progress-bar" style="width: 0%"></div>
+      </div>
+      <div class="text-sm text-gray-400" id="progress-text">0%</div>
+    </div>
+  `;
+  document.body.appendChild(loadingElement);
+}
+
+function updateLoadingProgress(percent, text) {
+  if (!loadingElement) return;
+  // Always get fresh references
+  const progressBar = document.getElementById('progress-bar');
+  const loadingText = document.getElementById('loading-text');
+  const progressText = document.getElementById('progress-text');
+  if (progressBar) {
+    progressBar.style.width = `${percent}%`;
+  }
+  if (loadingText) {
+    loadingText.textContent = text;
+  }
+  if (progressText) {
+    progressText.textContent = `${Math.round(percent)}%`;
+  }
+}
+
+function hideLoadingScreen() {
+  if (loadingElement) {
+    loadingElement.remove();
+    loadingElement = null;
+    progressBar = null;
+    loadingText = null;
+    progressText = null;
+  }
+}
+
 async function main() {
   hideError();
   
+  // Zobraz loading screen
+  createLoadingScreen();
+  updateLoadingProgress(10, 'Inicializujem hru...');
+  
   // Načítanie konfigurácie máp
   try {
+    updateLoadingProgress(20, 'Načítavam konfiguráciu máp...');
     const mapsResp = await fetch(MAPS_CONFIG);
     if (mapsResp.ok) {
       const mapsData = await mapsResp.json();
       maps = mapsData.maps;
       const defaultMapId = mapsData.defaultMap || Object.keys(maps)[0];
       
+      updateLoadingProgress(40, 'Načítavam hernú mapu...');
       // Načítanie predvolenej mapy
       let { bgImg } = await loadMap(defaultMapId);
       
+      updateLoadingProgress(80, 'Vytváram herné rozhranie...');
       // Canvas setup
       const canvas = document.createElement('canvas');
       canvas.className = 'block w-full h-full';
@@ -419,6 +502,7 @@ async function main() {
       player.y = currentMapConfig.playerStartY || bgImg.height / 2;
       player.speed = 5;
 
+      updateLoadingProgress(90, 'Nastavujem ovládanie...');
       // Ovládanie (keys už je definované globálne)
       window.addEventListener('keydown', e => { keys[e.key] = true; });
       window.addEventListener('keyup', e => { keys[e.key] = false; });
@@ -426,6 +510,7 @@ async function main() {
       // Vytvor gamepad pre mobilné zariadenia
       createGamepad();
 
+      updateLoadingProgress(95, 'Spúšťam hru...');
       // Resizovanie canvasu
       function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -596,11 +681,19 @@ async function main() {
         requestAnimationFrame(gameLoop);
       }
 
-      gameLoop();
+      updateLoadingProgress(100, 'Hra pripravená!');
+      
+      // Skryj loading screen po krátkom čase
+      setTimeout(() => {
+        hideLoadingScreen();
+        gameLoop();
+      }, 500);
+      
     } else {
       throw new Error('Nepodarilo sa načítať maps.json');
     }
   } catch (err) {
+    hideLoadingScreen();
     showError(err);
   }
 }
