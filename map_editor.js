@@ -1,6 +1,7 @@
 // Editor nepriechodných regiónov pre FF-like hru
 
 const BG_SRC = 'background.png';
+const MAPS_CONFIG = 'maps.json';
 const canvas = document.getElementById('map-canvas');
 const ctx = canvas.getContext('2d');
 const exportOutput = document.getElementById('export-output');
@@ -15,6 +16,11 @@ let mode = 'region'; // 'region', 'trigger', alebo 'select'
 let triggers = [];
 let currentTriggerText = '';
 let selectedObject = null; // { type: 'region'|'trigger', index: number }
+
+// ====== MAPY ======
+let maps = {};
+let currentMapId = null;
+let currentMapConfig = null;
 
 function fitImageToCanvas() {
   // Zmenši obrázok tak, aby sa vošiel do canvasu (max 90vw x 70vh)
@@ -319,7 +325,8 @@ document.getElementById('btn-export').onclick = () => {
     regions: regions.map(region => region.map(pt => canvasToMap(pt.x, pt.y))),
     triggers: triggers.map(trig => ({
       polygon: trig.polygon.map(pt => canvasToMap(pt.x, pt.y)),
-      text: trig.text
+      text: trig.text,
+      action: trig.action
     }))
   };
   exportOutput.value = JSON.stringify(exportData, null, 2);
@@ -344,7 +351,8 @@ document.getElementById('import-json').onchange = e => {
       regions = regions.map(region => region.map(pt => mapToCanvas(pt.x, pt.y)));
       triggers = triggers.map(trig => ({
         polygon: trig.polygon.map(pt => mapToCanvas(pt.x, pt.y)),
-        text: trig.text
+        text: trig.text,
+        action: trig.action || null
       }));
       updateStatusBar();
       draw();
@@ -355,40 +363,190 @@ document.getElementById('import-json').onchange = e => {
   reader.readAsText(file);
 };
 
-// Načítanie obrázka a inicializácia
-bgImg.onload = () => {
+// Funkcia na načítanie mapy
+async function loadMap(mapId) {
+  if (!maps[mapId]) {
+    console.error(`Mapa '${mapId}' neexistuje`);
+    return;
+  }
+  
+  currentMapId = mapId;
+  currentMapConfig = maps[mapId];
+  
+  // Načítanie pozadia
+  bgImg = new window.Image();
+  bgImg.src = currentMapConfig.background;
+  
+  await new Promise((resolve, reject) => {
+    bgImg.onload = resolve;
+    bgImg.onerror = () => reject(new Error('Nepodarilo sa načítať obrázok pozadia: ' + currentMapConfig.background));
+  });
+  
+  // Nastav scale a canvas veľkosť
   fitImageToCanvas();
+  
+  // Načítanie regiónov a triggerov (až po nastavení scale)
+  try {
+    const resp = await fetch(currentMapConfig.regions);
+    if (resp.ok) {
+      const data = await resp.json();
+      regions = (data.regions || []).map(region => region.map(pt => mapToCanvas(pt.x, pt.y)));
+      triggers = (data.triggers || []).map(trig => ({
+        polygon: trig.polygon.map(pt => mapToCanvas(pt.x, pt.y)),
+        text: trig.text,
+        action: trig.action || null
+      }));
+    } else {
+      regions = [];
+      triggers = [];
+    }
+  } catch (e) {
+    regions = [];
+    triggers = [];
+  }
+  
   updateStatusBar();
   draw();
+  updateMapInfo();
+}
+
+// Funkcia na aktualizáciu informácií o mape
+function updateMapInfo() {
+  const info = document.getElementById('current-map-info');
+  if (currentMapConfig) {
+    info.textContent = `${currentMapConfig.name} - ${currentMapConfig.description}`;
+  } else {
+    info.textContent = '';
+  }
+}
+
+// Funkcia na vytvorenie novej mapy
+function createNewMap() {
+  const mapId = prompt('Zadaj ID novej mapy (napr. forest):');
+  if (!mapId) return;
+  
+  if (maps[mapId]) {
+    alert('Mapa s týmto ID už existuje!');
+    return;
+  }
+  
+  const mapName = prompt('Zadaj názov mapy:');
+  if (!mapName) return;
+  
+  const background = prompt('Zadaj názov súboru pozadia (napr. forest.png):');
+  if (!background) return;
+  
+  const description = prompt('Zadaj popis mapy:') || '';
+  
+  maps[mapId] = {
+    name: mapName,
+    background: background,
+    regions: `${mapId}.json`,
+    description: description
+  };
+  
+  updateMapSelector();
+  loadMap(mapId);
+}
+
+// Funkcia na aktualizáciu selector mapy
+function updateMapSelector() {
+  const selector = document.getElementById('map-selector');
+  selector.innerHTML = '';
+  
+  Object.keys(maps).forEach(mapId => {
+    const option = document.createElement('option');
+    option.value = mapId;
+    option.textContent = maps[mapId].name;
+    if (mapId === currentMapId) {
+      option.selected = true;
+    }
+    selector.appendChild(option);
+  });
+}
+
+// Funkcia na uloženie maps.json
+function saveMapsConfig() {
+  const mapsData = {
+    defaultMap: currentMapId || Object.keys(maps)[0],
+    maps: maps
+  };
+  
+  const dataStr = JSON.stringify(mapsData, null, 2);
+  const dataBlob = new Blob([dataStr], {type: 'application/json'});
+  
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(dataBlob);
+  link.download = 'maps.json';
+  link.click();
+}
+
+document.getElementById('btn-new-map').onclick = createNewMap;
+document.getElementById('btn-save-maps').onclick = saveMapsConfig;
+
+document.getElementById('map-selector').onchange = (e) => {
+  if (e.target.value) {
+    loadMap(e.target.value);
+  }
 };
-bgImg.onerror = () => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#222';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#fff';
-  ctx.font = '20px sans-serif';
-  ctx.fillText('Nepodarilo sa načítať background.png', 20, 40);
-};
-bgImg.src = BG_SRC;
+
+// Načítanie konfigurácie máp a inicializácia
+async function initializeEditor() {
+  try {
+    // Načítaj maps.json
+    const mapsResp = await fetch(MAPS_CONFIG);
+    if (mapsResp.ok) {
+      const mapsData = await mapsResp.json();
+      maps = mapsData.maps;
+      
+      // Nastav predvolenú mapu
+      const defaultMapId = mapsData.defaultMap || Object.keys(maps)[0];
+      updateMapSelector();
+      
+      if (defaultMapId && maps[defaultMapId]) {
+        await loadMap(defaultMapId);
+      } else {
+        // Ak nie je predvolená mapa, načítaj prvú dostupnú
+        const firstMapId = Object.keys(maps)[0];
+        if (firstMapId) {
+          await loadMap(firstMapId);
+        }
+      }
+    } else {
+      // Ak maps.json neexistuje, vytvor základnú mapu
+      maps = {
+        village: {
+          name: "Dedina",
+          background: "village.png",
+          regions: "village.json",
+          description: "Hlavná dedina hry"
+        }
+      };
+      updateMapSelector();
+      await loadMap('village');
+    }
+  } catch (err) {
+    console.error('Chyba pri inicializácii editora:', err);
+    // Fallback na základnú mapu
+    maps = {
+      village: {
+        name: "Dedina",
+        background: "village.png",
+        regions: "village.json",
+        description: "Hlavná dedina hry"
+      }
+    };
+    updateMapSelector();
+    await loadMap('village');
+  }
+}
+
+// Spusti inicializáciu
+initializeEditor();
 
 window.addEventListener('resize', () => {
   if (bgImg.complete && bgImg.naturalWidth) {
     fitImageToCanvas();
     draw();
   }
-});
-
-// Pri načítaní editora sa pokús načítať regions.json
-fetch('regions.json').then(resp => resp.ok ? resp.json() : null).then(data => {
-  if (!data) return;
-  regions = (data.regions || []).map(region => region.map(pt => mapToCanvas(pt.x, pt.y)));
-  triggers = (data.triggers || []).map(trig => ({
-    polygon: trig.polygon.map(pt => mapToCanvas(pt.x, pt.y)),
-    text: trig.text
-  }));
-  updateStatusBar();
-  draw();
-});
-
-// Inicializácia status baru
-updateStatusBar(); 
+}); 

@@ -1,6 +1,6 @@
 // Herný engine pre FF-like hru
 
-const GAME_BG_SRC = 'background.png'; // Môžeš nahradiť vlastným obrázkom
+const MAPS_CONFIG = 'maps.json';
 const PLAYER_RADIUS = 32;
 const PLAYER_COLOR = '#00ffcc';
 const DEBUG_COLOR = '#ff00cc';
@@ -9,9 +9,13 @@ const gameRoot = document.getElementById('game-root');
 const errorRoot = document.getElementById('error-root');
 
 // ====== KONFIGURÁCIA REGIÓNOV ======
-const REGIONS_SRC = 'regions.json'; // Export z editora
 let regions = [];
 let triggers = [];
+
+// ====== MAPY ======
+let maps = {};
+let currentMap = null;
+let currentMapId = null;
 
 // ====== TEXTOVÉ OKNO ======
 let textBoxActive = false;
@@ -281,194 +285,262 @@ function createGamepad() {
   });
 }
 
+// Funkcia na načítanie mapy
+async function loadMap(mapId) {
+  try {
+    const mapConfig = maps[mapId];
+    if (!mapConfig) {
+      throw new Error(`Mapa '${mapId}' neexistuje`);
+    }
+    
+    currentMapId = mapId;
+    currentMap = mapConfig;
+    
+    // Načítanie pozadia
+    const bgImg = new window.Image();
+    bgImg.src = mapConfig.background;
+    await new Promise((resolve, reject) => {
+      bgImg.onload = resolve;
+      bgImg.onerror = () => reject(new Error('Nepodarilo sa načítať obrázok pozadia: ' + mapConfig.background));
+    });
+    
+    // Načítanie regiónov a triggerov
+    try {
+      const resp = await fetch(mapConfig.regions);
+      if (resp.ok) {
+        const data = await resp.json();
+        regions = (data.regions || []).map(poly => poly.map(pt => ({x: pt.x, y: pt.y})));
+        triggers = (data.triggers || []).map(trig => ({
+          polygon: trig.polygon.map(pt => ({x: pt.x, y: pt.y})),
+          text: trig.text,
+          action: trig.action || null // Nové pole pre akcie (napr. prechod mapy)
+        }));
+        // Inicializuj debounce pre každý trigger
+        triggers.forEach((_, index) => {
+          lastTriggerTime[index] = 0;
+          playerInTrigger[index] = false;
+        });
+      }
+    } catch (e) {
+      regions = [];
+      triggers = [];
+    }
+    
+    return { bgImg, mapConfig };
+  } catch (err) {
+    throw new Error(`Chyba pri načítaní mapy '${mapId}': ${err.message}`);
+  }
+}
+
+// Funkcia na spracovanie trigger akcií
+async function processTriggerAction(trigger) {
+  if (!trigger.action) return;
+  
+  const action = trigger.action;
+  if (action.type === 'changeMap') {
+    // Prechod na inú mapu
+    await loadMap(action.mapId);
+    // Reset pozície hráča na novú mapu
+    player.x = action.playerX || 100;
+    player.y = action.playerY || 100;
+    // Načítaj nové pozadie a regióny
+    const { bgImg } = await loadMap(action.mapId);
+    return bgImg;
+  }
+  return null;
+}
+
 async function main() {
   hideError();
-  // Canvas setup
-  const canvas = document.createElement('canvas');
-  canvas.className = 'block w-full h-full';
-  canvas.tabIndex = 0;
-  gameRoot.innerHTML = '';
-  gameRoot.appendChild(canvas);
-  const ctx = canvas.getContext('2d');
-
-  // Načítanie pozadia
-  const bgImg = new window.Image();
-  bgImg.src = GAME_BG_SRC;
-  await new Promise((resolve, reject) => {
-    bgImg.onload = resolve;
-    bgImg.onerror = () => reject(new Error('Nepodarilo sa načítať obrázok pozadia: ' + GAME_BG_SRC));
-  });
-
-  // Herný stav
-  let player = {
-    x: bgImg.width / 2,
-    y: bgImg.height / 2,
-    speed: 5,
-  };
-
-  // Ovládanie (keys už je definované globálne)
-  window.addEventListener('keydown', e => { keys[e.key] = true; });
-  window.addEventListener('keyup', e => { keys[e.key] = false; });
-
-  // Vytvor gamepad pre mobilné zariadenia
-  createGamepad();
-
-  // Resizovanie canvasu
-  function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
-
-  // Výpočet offsetu pozadia podľa pozície hráča
-  function getBgOffset() {
-    let offsetX = 0, offsetY = 0;
-    // Horizontálne
-    if (bgImg.width <= canvas.width) {
-      offsetX = (canvas.width - bgImg.width) / 2;
-    } else {
-      const leftLimit = canvas.width / 2;
-      const rightLimit = bgImg.width - canvas.width / 2;
-      if (player.x < leftLimit) offsetX = 0;
-      else if (player.x > rightLimit) offsetX = canvas.width - bgImg.width;
-      else offsetX = leftLimit - player.x;
-    }
-    // Vertikálne
-    if (bgImg.height <= canvas.height) {
-      offsetY = (canvas.height - bgImg.height) / 2;
-    } else {
-      const topLimit = canvas.height / 2;
-      const bottomLimit = bgImg.height - canvas.height / 2;
-      if (player.y < topLimit) offsetY = 0;
-      else if (player.y > bottomLimit) offsetY = canvas.height - bgImg.height;
-      else offsetY = topLimit - player.y;
-    }
-    return { offsetX, offsetY };
-  }
-
-  // Načítanie regiónov a triggerov
+  
+  // Načítanie konfigurácie máp
   try {
-    const resp = await fetch(REGIONS_SRC);
-    if (resp.ok) {
-      const data = await resp.json();
-      regions = (data.regions || []).map(poly => poly.map(pt => ({x: pt.x, y: pt.y})));
-      triggers = (data.triggers || []).map(trig => ({
-        polygon: trig.polygon.map(pt => ({x: pt.x, y: pt.y})),
-        text: trig.text
-      }));
-      // Inicializuj debounce pre každý trigger
-      triggers.forEach((_, index) => {
-        lastTriggerTime[index] = 0;
-        playerInTrigger[index] = false;
-      });
-    }
-  } catch (e) {
-    regions = [];
-    triggers = [];
-  }
-
-  // Herný loop
-  async function gameLoop() {
-    // Ak je aktívne textové okno, pauzni hru
-    if (textBoxActive) {
-      requestAnimationFrame(gameLoop);
-      return;
-    }
-    // Pohyb hráča s kolíziou
-    let nextX = player.x;
-    let nextY = player.y;
-    if (keys['ArrowUp']) nextY -= player.speed;
-    if (keys['ArrowDown']) nextY += player.speed;
-    if (keys['ArrowLeft']) nextX -= player.speed;
-    if (keys['ArrowRight']) nextX += player.speed;
-    // Ochrana proti pohybu mimo mapu
-    nextX = Math.max(PLAYER_RADIUS, Math.min(bgImg.width - PLAYER_RADIUS, nextX));
-    nextY = Math.max(PLAYER_RADIUS, Math.min(bgImg.height - PLAYER_RADIUS, nextY));
-    // Kontrola kolízie s regiónmi (stred hráča)
-    let collision = false;
-    for (const poly of regions) {
-      if (pointInPolygon({x: nextX, y: nextY}, poly)) {
-        collision = true;
-        break;
-      }
-    }
-    if (!collision) {
-      player.x = nextX;
-      player.y = nextY;
-    }
-    // Trigger na textové okno s debounce
-    const currentTime = Date.now();
-    const DEBOUNCE_TIME = 2000; // 2 sekundy
-    
-    for (let i = 0; i < triggers.length; i++) {
-      const trig = triggers[i];
-      const isInTrigger = pointInPolygon({x: player.x, y: player.y}, trig.polygon);
+    const mapsResp = await fetch(MAPS_CONFIG);
+    if (mapsResp.ok) {
+      const mapsData = await mapsResp.json();
+      maps = mapsData.maps;
+      const defaultMapId = mapsData.defaultMap || Object.keys(maps)[0];
       
-      if (isInTrigger) {
-        // Ak hráč vstúpil do triggeru
-        if (!playerInTrigger[i]) {
-          playerInTrigger[i] = true;
-          // Ak uplynul dostatočný čas od posledného spustenia
-          if (currentTime - lastTriggerTime[i] > DEBOUNCE_TIME) {
-            lastTriggerTime[i] = currentTime;
-            await showTextBox(trig.text);
+      // Načítanie predvolenej mapy
+      const { bgImg } = await loadMap(defaultMapId);
+      
+      // Canvas setup
+      const canvas = document.createElement('canvas');
+      canvas.className = 'block w-full h-full';
+      canvas.tabIndex = 0;
+      gameRoot.innerHTML = '';
+      gameRoot.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+
+      // Herný stav
+      let player = {
+        x: bgImg.width / 2,
+        y: bgImg.height / 2,
+        speed: 5,
+      };
+
+      // Ovládanie (keys už je definované globálne)
+      window.addEventListener('keydown', e => { keys[e.key] = true; });
+      window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+      // Vytvor gamepad pre mobilné zariadenia
+      createGamepad();
+
+      // Resizovanie canvasu
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // Výpočet offsetu pozadia podľa pozície hráča
+      function getBgOffset() {
+        let offsetX = 0, offsetY = 0;
+        // Horizontálne
+        if (bgImg.width <= canvas.width) {
+          offsetX = (canvas.width - bgImg.width) / 2;
+        } else {
+          const leftLimit = canvas.width / 2;
+          const rightLimit = bgImg.width - canvas.width / 2;
+          if (player.x < leftLimit) offsetX = 0;
+          else if (player.x > rightLimit) offsetX = canvas.width - bgImg.width;
+          else offsetX = leftLimit - player.x;
+        }
+        // Vertikálne
+        if (bgImg.height <= canvas.height) {
+          offsetY = (canvas.height - bgImg.height) / 2;
+        } else {
+          const topLimit = canvas.height / 2;
+          const bottomLimit = bgImg.height - canvas.height / 2;
+          if (player.y < topLimit) offsetY = 0;
+          else if (player.y > bottomLimit) offsetY = canvas.height - bgImg.height;
+          else offsetY = topLimit - player.y;
+        }
+        return { offsetX, offsetY };
+      }
+
+      // Herný loop
+      async function gameLoop() {
+        // Ak je aktívne textové okno, pauzni hru
+        if (textBoxActive) {
+          requestAnimationFrame(gameLoop);
+          return;
+        }
+        
+        // Pohyb hráča s kolíziou
+        let nextX = player.x;
+        let nextY = player.y;
+        if (keys['ArrowUp']) nextY -= player.speed;
+        if (keys['ArrowDown']) nextY += player.speed;
+        if (keys['ArrowLeft']) nextX -= player.speed;
+        if (keys['ArrowRight']) nextX += player.speed;
+        // Ochrana proti pohybu mimo mapu
+        nextX = Math.max(PLAYER_RADIUS, Math.min(bgImg.width - PLAYER_RADIUS, nextX));
+        nextY = Math.max(PLAYER_RADIUS, Math.min(bgImg.height - PLAYER_RADIUS, nextY));
+        // Kontrola kolízie s regiónmi (stred hráča)
+        let collision = false;
+        for (const poly of regions) {
+          if (pointInPolygon({x: nextX, y: nextY}, poly)) {
+            collision = true;
+            break;
           }
         }
-      } else {
-        // Ak hráč opustil trigger
-        playerInTrigger[i] = false;
-      }
-    }
+        if (!collision) {
+          player.x = nextX;
+          player.y = nextY;
+        }
+        
+        // Trigger na textové okno s debounce
+        const currentTime = Date.now();
+        const DEBOUNCE_TIME = 2000; // 2 sekundy
+        
+        for (let i = 0; i < triggers.length; i++) {
+          const trig = triggers[i];
+          const isInTrigger = pointInPolygon({x: player.x, y: player.y}, trig.polygon);
+          
+          if (isInTrigger) {
+            // Ak hráč vstúpil do triggeru
+            if (!playerInTrigger[i]) {
+              playerInTrigger[i] = true;
+              // Ak uplynul dostatočný čas od posledného spustenia
+              if (currentTime - lastTriggerTime[i] > DEBOUNCE_TIME) {
+                lastTriggerTime[i] = currentTime;
+                
+                // Spracuj akciu triggeru (ak existuje)
+                const newBgImg = await processTriggerAction(trig);
+                if (newBgImg) {
+                  bgImg = newBgImg;
+                  continue; // Pokračuj s novou mapou
+                }
+                
+                // Zobraz textové okno (ak nie je akcia)
+                if (trig.text) {
+                  await showTextBox(trig.text);
+                }
+              }
+            }
+          } else {
+            // Ak hráč opustil trigger
+            playerInTrigger[i] = false;
+          }
+        }
 
-    // Výpočet offsetu
-    const { offsetX, offsetY } = getBgOffset();
+        // Výpočet offsetu
+        const { offsetX, offsetY } = getBgOffset();
 
-    // Vykreslenie pozadia
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bgImg, offsetX, offsetY, bgImg.width, bgImg.height);
+        // Vykreslenie pozadia
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bgImg, offsetX, offsetY, bgImg.width, bgImg.height);
 
-    // Vykreslenie hráča
-    const px = player.x + offsetX;
-    const py = player.y + offsetY;
-    ctx.beginPath();
-    ctx.arc(px, py, PLAYER_RADIUS, 0, 2 * Math.PI);
-    ctx.fillStyle = PLAYER_COLOR;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = DEBUG_COLOR;
-    ctx.stroke();
-
-    // Debug info
-    ctx.font = '16px monospace';
-    ctx.fillStyle = DEBUG_COLOR;
-    ctx.fillText(`x: ${player.x.toFixed(1)} y: ${player.y.toFixed(1)}`, px + PLAYER_RADIUS + 8, py);
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(px + 40, py);
-    ctx.strokeStyle = DEBUG_COLOR;
-    ctx.stroke();
-
-    // Debug: vykresli regióny
-    ctx.save();
-    ctx.globalAlpha = 0.4;
-    ctx.fillStyle = '#ff0000';
-    for (const poly of regions) {
-      if (poly.length > 2) {
+        // Vykreslenie hráča
+        const px = player.x + offsetX;
+        const py = player.y + offsetY;
         ctx.beginPath();
-        ctx.moveTo(poly[0].x + offsetX, poly[0].y + offsetY);
-        for (let i = 1; i < poly.length; ++i) ctx.lineTo(poly[i].x + offsetX, poly[i].y + offsetY);
-        ctx.closePath();
+        ctx.arc(px, py, PLAYER_RADIUS, 0, 2 * Math.PI);
+        ctx.fillStyle = PLAYER_COLOR;
         ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = DEBUG_COLOR;
+        ctx.stroke();
+
+        // Debug: vykresli regióny
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = '#ff0000';
+        for (const poly of regions) {
+          if (poly.length > 2) {
+            ctx.beginPath();
+            ctx.moveTo(poly[0].x + offsetX, poly[0].y + offsetY);
+            for (let i = 1; i < poly.length; ++i) ctx.lineTo(poly[i].x + offsetX, poly[i].y + offsetY);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+
+        // Debug info
+        ctx.font = '16px monospace';
+        ctx.fillStyle = DEBUG_COLOR;
+        ctx.fillText(`x: ${player.x.toFixed(1)} y: ${player.y.toFixed(1)}`, px + PLAYER_RADIUS + 8, py);
+        ctx.fillText(`Mapa: ${currentMap.name}`, px + PLAYER_RADIUS + 8, py + 20);
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + 40, py);
+        ctx.strokeStyle = DEBUG_COLOR;
+        ctx.stroke();
+
+        requestAnimationFrame(gameLoop);
       }
+
+      gameLoop();
+    } else {
+      throw new Error('Nepodarilo sa načítať maps.json');
     }
-    ctx.restore();
-
-    requestAnimationFrame(gameLoop);
+  } catch (err) {
+    showError(err);
   }
-
-  gameLoop();
 }
 
 // Spustenie hry s error handlingom

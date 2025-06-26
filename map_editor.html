@@ -9,6 +9,23 @@
   <body class="bg-gray-900 min-h-screen min-w-screen flex flex-col items-center justify-start p-4">
     <h1 class="text-3xl font-bold text-white mb-6">🎮 Editor Máp - FF-like Hra</h1>
     
+    <!-- Výber mapy -->
+    <div class="bg-gray-800 rounded-lg p-4 mb-4 w-full max-w-4xl">
+      <h2 class="text-xl font-semibold text-white mb-3">Aktuálna mapa</h2>
+      <div class="flex flex-wrap gap-4 items-center">
+        <select id="map-selector" class="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600">
+          <option value="">Načítavam mapy...</option>
+        </select>
+        <button id="btn-new-map" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+          ➕ Nová mapa
+        </button>
+        <button id="btn-save-maps" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors">
+          💾 Uložiť maps.json
+        </button>
+        <span id="current-map-info" class="text-gray-300 text-sm"></span>
+      </div>
+    </div>
+    
     <!-- Hlavné ovládanie -->
     <div class="bg-gray-800 rounded-lg p-4 mb-4 w-full max-w-4xl">
       <h2 class="text-xl font-semibold text-white mb-3">Režimy kreslenia</h2>

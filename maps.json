@@ -1,0 +1,11 @@
+{
+  "defaultMap": "village",
+  "maps": {
+    "village": {
+      "name": "Dedina",
+      "background": "village.png",
+      "regions": "village.json",
+      "description": "Hlavná dedina hry"
+    }
+  }
+}
