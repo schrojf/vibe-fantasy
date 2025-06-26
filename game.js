@@ -11,24 +11,7 @@ const errorRoot = document.getElementById('error-root');
 // ====== KONFIGURÁCIA REGIÓNOV ======
 const REGIONS_SRC = 'regions.json'; // Export z editora
 let regions = [];
-
-// ====== TRIGGERY PRE TEXTOVÉ OKNÁ ======
-const TEXT_TRIGGERS = [
-  {
-    id: 'budova1',
-    region: [ // jednoduchý obdĺžnik okolo budovy (príklad)
-      {x: 400, y: 300},
-      {x: 600, y: 300},
-      {x: 600, y: 500},
-      {x: 400, y: 500}
-    ],
-    text: [
-      'Vitaj v našej dedine!\nTu začína tvoja cesta.',
-      'Ak chceš pokračovať, vydaj sa na sever.'
-    ],
-    triggered: false
-  }
-];
+let triggers = [];
 
 // ====== TEXTOVÉ OKNO ======
 let textBoxActive = false;
@@ -213,17 +196,21 @@ async function main() {
     return { offsetX, offsetY };
   }
 
-  // Načítanie regiónov
+  // Načítanie regiónov a triggerov
   try {
     const resp = await fetch(REGIONS_SRC);
     if (resp.ok) {
       const data = await resp.json();
-      // Konvertuj na {x, y} objekty ak treba
-      regions = data.map(poly => poly.map(pt => ({x: pt.x, y: pt.y})));
+      regions = (data.regions || []).map(poly => poly.map(pt => ({x: pt.x, y: pt.y})));
+      triggers = (data.triggers || []).map(trig => ({
+        polygon: trig.polygon.map(pt => ({x: pt.x, y: pt.y})),
+        text: trig.text,
+        triggered: false
+      }));
     }
   } catch (e) {
-    // Ak regions.json neexistuje, regióny budú prázdne
     regions = [];
+    triggers = [];
   }
 
   // Herný loop
@@ -256,8 +243,8 @@ async function main() {
       player.y = nextY;
     }
     // Trigger na textové okno
-    for (const trig of TEXT_TRIGGERS) {
-      if (!trig.triggered && pointInPolygon({x: player.x, y: player.y}, trig.region)) {
+    for (const trig of triggers) {
+      if (!trig.triggered && pointInPolygon({x: player.x, y: player.y}, trig.polygon)) {
         trig.triggered = true;
         await showTextBox(trig.text);
       }

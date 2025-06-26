@@ -11,6 +11,9 @@ let offsetX = 0, offsetY = 0;
 
 let regions = [];
 let currentRegion = [];
+let mode = 'region'; // 'region' alebo 'trigger'
+let triggers = [];
+let currentTriggerText = '';
 
 function fitImageToCanvas() {
   // Zmenši obrázok tak, aby sa vošiel do canvasu (max 90vw x 70vh)
@@ -26,7 +29,7 @@ function fitImageToCanvas() {
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-  // Vykresli všetky regióny
+  // Vykresli regióny (červené)
   ctx.save();
   ctx.globalAlpha = 0.4;
   ctx.fillStyle = '#ff0000';
@@ -40,10 +43,24 @@ function draw() {
     }
   }
   ctx.restore();
-  // Aktuálny región
+  // Vykresli triggery (fialové)
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = '#a21caf';
+  for (const trig of triggers) {
+    if (trig.polygon.length > 2) {
+      ctx.beginPath();
+      ctx.moveTo(trig.polygon[0].x, trig.polygon[0].y);
+      for (let i = 1; i < trig.polygon.length; ++i) ctx.lineTo(trig.polygon[i].x, trig.polygon[i].y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+  // Body aktuálneho regiónu
   if (currentRegion.length > 0) {
     ctx.save();
-    ctx.strokeStyle = '#00ffcc';
+    ctx.strokeStyle = mode === 'region' ? '#00ffcc' : '#a21caf';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(currentRegion[0].x, currentRegion[0].y);
@@ -54,7 +71,7 @@ function draw() {
     for (const pt of currentRegion) {
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, 5, 0, 2 * Math.PI);
-      ctx.fillStyle = '#00ffcc';
+      ctx.fillStyle = mode === 'region' ? '#00ffcc' : '#a21caf';
       ctx.fill();
     }
   }
@@ -64,6 +81,15 @@ function draw() {
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, 4, 0, 2 * Math.PI);
       ctx.fillStyle = '#ff0000';
+      ctx.fill();
+    }
+  }
+  // Body triggerov
+  for (const trig of triggers) {
+    for (const pt of trig.polygon) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = '#a21caf';
       ctx.fill();
     }
   }
@@ -78,6 +104,16 @@ function mapToCanvas(x, y) {
   return { x: Math.round(x * scale), y: Math.round(y * scale) };
 }
 
+function setMode(newMode) {
+  mode = newMode;
+  document.getElementById('btn-mode-region').classList.toggle('opacity-50', mode !== 'region');
+  document.getElementById('btn-mode-trigger').classList.toggle('opacity-50', mode !== 'trigger');
+}
+
+document.getElementById('btn-mode-region').onclick = () => setMode('region');
+document.getElementById('btn-mode-trigger').onclick = () => setMode('trigger');
+setMode('region');
+
 canvas.addEventListener('click', e => {
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
@@ -86,16 +122,33 @@ canvas.addEventListener('click', e => {
   draw();
 });
 
-canvas.addEventListener('dblclick', e => {
+canvas.addEventListener('dblclick', async e => {
   if (currentRegion.length > 2) {
-    regions.push([...currentRegion]);
+    if (mode === 'region') {
+      regions.push([...currentRegion]);
+    } else if (mode === 'trigger') {
+      let text = prompt('Zadaj text pre tento trigger (použi \\n pre nový riadok):', currentTriggerText || '');
+      if (text) {
+        triggers.push({ polygon: [...currentRegion], text });
+        currentTriggerText = text;
+      }
+    }
     currentRegion = [];
     draw();
   }
 });
 
 document.getElementById('btn-new-region').onclick = () => {
-  if (currentRegion.length > 2) regions.push([...currentRegion]);
+  if (currentRegion.length > 2) {
+    if (mode === 'region') regions.push([...currentRegion]);
+    else if (mode === 'trigger') {
+      let text = prompt('Zadaj text pre tento trigger (použi \\n pre nový riadok):', currentTriggerText || '');
+      if (text) {
+        triggers.push({ polygon: [...currentRegion], text });
+        currentTriggerText = text;
+      }
+    }
+  }
   currentRegion = [];
   draw();
 };
@@ -107,15 +160,51 @@ document.getElementById('btn-undo').onclick = () => {
 
 document.getElementById('btn-clear').onclick = () => {
   regions = [];
+  triggers = [];
   currentRegion = [];
   draw();
   exportOutput.value = '';
 };
 
 document.getElementById('btn-export').onclick = () => {
-  // Exportuj regióny v súradniciach mapy
-  const exportData = regions.map(region => region.map(pt => canvasToMap(pt.x, pt.y)));
+  // Exportuj regióny a triggery v súradniciach mapy
+  const exportData = {
+    regions: regions.map(region => region.map(pt => canvasToMap(pt.x, pt.y))),
+    triggers: triggers.map(trig => ({
+      polygon: trig.polygon.map(pt => canvasToMap(pt.x, pt.y)),
+      text: trig.text
+    }))
+  };
   exportOutput.value = JSON.stringify(exportData, null, 2);
+};
+
+document.getElementById('import-json').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      const data = JSON.parse(evt.target.result);
+      if (Array.isArray(data)) {
+        // starý formát: len regions
+        regions = data;
+        triggers = [];
+      } else {
+        regions = data.regions || [];
+        triggers = data.triggers || [];
+      }
+      // Preveď na canvas súradnice
+      regions = regions.map(region => region.map(pt => mapToCanvas(pt.x, pt.y)));
+      triggers = triggers.map(trig => ({
+        polygon: trig.polygon.map(pt => mapToCanvas(pt.x, pt.y)),
+        text: trig.text
+      }));
+      draw();
+    } catch (err) {
+      alert('Chyba pri načítaní JSON: ' + err);
+    }
+  };
+  reader.readAsText(file);
 };
 
 // Načítanie obrázka a inicializácia
@@ -138,4 +227,15 @@ window.addEventListener('resize', () => {
     fitImageToCanvas();
     draw();
   }
+});
+
+// Pri načítaní editora sa pokús načítať regions.json
+fetch('regions.json').then(resp => resp.ok ? resp.json() : null).then(data => {
+  if (!data) return;
+  regions = (data.regions || []).map(region => region.map(pt => mapToCanvas(pt.x, pt.y)));
+  triggers = (data.triggers || []).map(trig => ({
+    polygon: trig.polygon.map(pt => mapToCanvas(pt.x, pt.y)),
+    text: trig.text
+  }));
+  draw();
 }); 
