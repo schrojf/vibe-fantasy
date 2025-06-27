@@ -24,15 +24,10 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
-    - name: Configure Git
+      - name: Deploy with gh-pages
       run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
-        
-    - name: Build and deploy
-      run: |
-        npm run predeploy-gh-pages
-        npm run deploy-gh-pages
+        git remote set-url origin https://git:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+        npm run deploy -- -u "github-actions-bot <support+actions@github.com>"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
